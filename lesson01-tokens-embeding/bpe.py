@@ -56,8 +56,8 @@ class BPE:
         
         # 4. Создаем словари
         self.vocab = tokens.copy()
-        self.id2token = {i: token for i, token in enumerate(tokens[:self.vocab_size])}
-        self.token2id = {token: i for i, token in self.id2token.items()}
+        self.token2id = dict(zip(tokens, range(self.vocab_size)))
+        self.id2token = dict(zip(range(self.vocab_size), tokens))
 
     def _pair_first_index(self, sequence, pair):
         for i in range(len(sequence) - 1):
