@@ -106,3 +106,17 @@ class BPE:
             else:
                 ids.append(-1)  # Специальное значение
         return ids
+
+
+    def decode(self, ids: list) -> str:
+        return ''.join(self._ids_to_tokens(ids))
+
+    def _ids_to_tokens(self, ids: list) -> list:
+        """Конвертирует список Ids в их tokens"""
+        tokens = []
+        for id in ids:
+            if id in self.id2token:
+                tokens.append(self.id2token[id])
+            else:
+                tokens.append('')  # Специальное значение
+        return tokens
