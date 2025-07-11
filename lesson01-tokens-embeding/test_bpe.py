@@ -1,6 +1,7 @@
 import ast
 import os
 import sys
+import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 from bpe import BPE
@@ -32,3 +33,29 @@ def test_bpe_against_examples():
             f"Failed for vocab_size={vocab_size}, text={text}. "
             f"Expected tokens: {expected_tokens}, got: {getattr(bpe, 'vocab', None)}"
         )
+
+
+def test_save_load_dill(tmp_path):
+    """Тестирование сохранения и загрузки с использованием dill"""
+    # 1. Подготовка тестовой модели
+    original = BPE(vocab_size=30)
+    original.fit("абра кадабра абра швабра")
+    
+    # 2. Сохранение модели
+    test_file = tmp_path / "bpe_model.dill"
+    original.save(test_file)
+    
+    # 3. Проверка файла
+    assert test_file.exists()
+    assert test_file.stat().st_size > 0
+    
+    # 4. Загрузка модели
+    loaded = BPE.load(test_file)
+    
+    # 5. Проверка целостности
+    assert loaded.vocab_size == original.vocab_size
+    assert loaded.vocab == original.vocab
+    assert loaded.token2id == original.token2id
+    
+    # 6. Проверка работоспособности
+    assert loaded.encode("кадабра") == original.encode("кадабра")

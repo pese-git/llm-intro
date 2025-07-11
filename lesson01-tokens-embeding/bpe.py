@@ -1,3 +1,5 @@
+import dill
+
 class BPE:
     def __init__(self, vocab_size: int):
         self.vocab_size = vocab_size
@@ -120,3 +122,18 @@ class BPE:
             else:
                 tokens.append('')  # Специальное значение
         return tokens
+
+
+    def save(self, filename):
+        with open(filename, 'wb') as f:
+            dill.dump(self, f)
+        print(f"Объект сохранён в {filename}")
+
+
+    @classmethod
+    def load(cls, filename):
+        with open(filename, 'rb') as f:
+            obj = dill.load(f)
+                
+        print(f"Объект загружен из {filename}")
+        return obj
