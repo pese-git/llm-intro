@@ -1,5 +1,6 @@
 from torch import nn
 import torch
+import torch.nn.functional as F
 from token_embeddings import TokenEmbeddings
 from positional_embeddings import PositionalEmbeddings
 from decoder import Decoder
@@ -75,3 +76,40 @@ class GPT(nn.Module):
             out = decoder(out)
             
         return self._linear(out)  # [batch, seq_len, vocab_size]
+
+    def generate(self, x: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
+        """Авторегрессивная генерация текста
+        
+        Args:
+            x: Входной тензор с индексами токенов [batch_size, seq_len]
+            max_new_tokens: Максимальное количество новых токенов для генерации
+            
+        Returns:
+            Тензор с расширенной последовательностью токенов [batch_size, seq_len + max_new_tokens]
+            
+        Алгоритм работы:
+        1. На каждом шаге берется последний фрагмент последовательности (не длиннее max_seq_len)
+        2. Вычисляются логиты для следующего токена
+        3. Выбирается токен с максимальной вероятностью (жадный алгоритм)
+        4. Токен добавляется к последовательности
+        5. Процесс повторяется пока не сгенерируется max_new_tokens токенов
+        """
+        for _ in range(max_new_tokens):
+            # 1. Обрезаем вход, если последовательность слишком длинная
+            x_cond = x[:, -self.max_seq_len:]
+
+            # 2. Передаем последовательность в метод forward класса GPT и полуаем логиты.
+            logits = self.forward(x_cond)
+
+            # 3. Берем логиты для последнего токена
+            last_logits = logits[:, -1, :]  # [batch_size, vocab_size]
+
+            # 4. Применяем Softmax
+            probs = F.softmax(last_logits, dim=-1)  # [batch_size, vocab_size]
+
+            # 5. Выбираем токен с максимальной вероятностью
+            next_token = torch.argmax(probs, dim=-1, keepdim=True)  # [batch_size, 1]
+
+            # 6. Добавляем его к последовательности
+            x = torch.cat([x, next_token], dim=1)  # [batch_size, seq_len+1]     
+        return x
