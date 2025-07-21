@@ -45,7 +45,7 @@ class TestGPT:
     def test_generate_basic(self, default_config, sample_input):
         """Тест базовой генерации"""
         gpt = GPT(**default_config)
-        generated = gpt.generate(sample_input, max_new_tokens=10)
+        generated = gpt.generate(sample_input, max_new_tokens=10, do_sample=False)
         assert generated.shape == (2, 42)  # Исходные 32 + 10 новых токенов
 
     def test_generate_empty(self, default_config):
@@ -53,29 +53,75 @@ class TestGPT:
         gpt = GPT(**default_config)
         empty_input = torch.randint(0, 1000, (2, 0))
         with pytest.raises(IndexError):
-            gpt.generate(empty_input, max_new_tokens=10)
+            gpt.generate(empty_input, max_new_tokens=10, do_sample=False)
 
     def test_generate_max_length(self, default_config):
         """Тест генерации с максимальной длиной последовательности"""
         gpt = GPT(**default_config)
         # Вход с максимальной длиной
         max_len_input = torch.randint(0, 1000, (2, 128))
-        generated = gpt.generate(max_len_input, max_new_tokens=1)
+        generated = gpt.generate(max_len_input, max_new_tokens=1, do_sample=False)
         assert generated.shape == (2, 129)
 
-    @pytest.mark.skip(reason="Требуется доработка генерации для поддержки детерминированности")
-    def test_generate_deterministic(self, default_config):
-        """Тест детерминированности генерации (при одинаковом seed)"""
-        # Фиксируем seed для входа
+    def test_generate_with_sampling(self, default_config, sample_input):
+        """Тест генерации с сэмплированием"""
+        torch.manual_seed(42)
+        gpt = GPT(**default_config)
+        generated = gpt.generate(sample_input, max_new_tokens=10, do_sample=True)
+        assert generated.shape == (2, 42)  # Исходные 32 + 10 новых токенов
+
+    def test_temperature_effect(self, default_config):
+        """Тест влияния температуры на генерацию"""
+        torch.manual_seed(42)
+        gpt = GPT(**default_config)
+        gpt.eval()
+        input_tensor = torch.randint(0, 1000, (1, 10))
+        
+        # Низкая температура делает распределение более "острым"
+        low_temp = gpt.generate(input_tensor, max_new_tokens=5, do_sample=True, temperature=0.1)
+        
+        # Высокая температура делает распределение более равномерным
+        high_temp = gpt.generate(input_tensor, max_new_tokens=5, do_sample=True, temperature=2.0)
+        
+        # При разных температурах должны быть разные результаты
+        assert not torch.equal(low_temp, high_temp), "Разные температуры должны давать разные результаты"
+
+    def test_temperature_zero_error(self, default_config, sample_input):
+        """Тест обработки нулевой температуры"""
+        gpt = GPT(**default_config)
+        with pytest.raises(ValueError):
+            gpt.generate(sample_input, max_new_tokens=5, do_sample=True, temperature=0.0)
+
+    def test_sample_vs_greedy_difference(self, default_config):
+        """Тест различий между жадным и сэмплирующим режимами"""
         torch.manual_seed(42)
         gpt = GPT(**default_config)
         input_tensor = torch.randint(0, 1000, (1, 10))
         
-        # Два вызова generate с одинаковым seed
-        out1 = gpt.generate(input_tensor.clone(), max_new_tokens=5)
-        out2 = gpt.generate(input_tensor.clone(), max_new_tokens=5)
+        greedy = gpt.generate(input_tensor, max_new_tokens=5, do_sample=False)
+        sampled = gpt.generate(input_tensor, max_new_tokens=5, do_sample=True)
         
-        assert torch.equal(out1, out2), "Результаты генерации должны быть идентичными при одинаковых seed"
+        assert not torch.equal(greedy, sampled), "Режимы должны давать разные результаты"
+
+    def test_generate_deterministic(self, default_config):
+        """Тест детерминированности генерации (при одинаковом seed)"""
+        # Фиксируем seed для воспроизводимости
+        torch.manual_seed(42)
+        gpt = GPT(**default_config)
+        gpt.eval()  # Отключаем dropout для детерминированности
+        input_tensor = torch.randint(0, 1000, (1, 10))
+        
+        # Жадный режим должен быть детерминированным
+        out1 = gpt.generate(input_tensor.clone(), max_new_tokens=5, do_sample=False)
+        out2 = gpt.generate(input_tensor.clone(), max_new_tokens=5, do_sample=False)
+        assert torch.equal(out1, out2), "Жадная генерация должна быть детерминированной"
+        
+        # Сэмплирующий режим с фиксированным seed
+        torch.manual_seed(42)
+        out3 = gpt.generate(input_tensor.clone(), max_new_tokens=5, do_sample=True)
+        torch.manual_seed(42)
+        out4 = gpt.generate(input_tensor.clone(), max_new_tokens=5, do_sample=True)
+        assert torch.equal(out3, out4), "Сэмплирование должно быть детерминированным при одинаковом seed"
 
 if __name__ == "__main__":
     pytest.main(["-v"])

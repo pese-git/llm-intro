@@ -83,7 +83,12 @@ class GPT(nn.Module):
             
         return self._linear(out)  # [batch, seq_len, vocab_size]
 
-    def generate(self, x: torch.Tensor, max_new_tokens: int, do_sample: bool) -> torch.Tensor:
+    def generate(self,
+        x: torch.Tensor, 
+        max_new_tokens: int, 
+        do_sample: bool,
+        temperature: float = 1.0
+    ) -> torch.Tensor:
         """Авторегрессивная генерация текста.
         
         Поддерживает два режима генерации:
@@ -97,6 +102,11 @@ class GPT(nn.Module):
             do_sample (bool): Флаг выбора режима генерации:
                               - True: вероятностное сэмплирование
                               - False: жадный поиск (argmax)
+            temperature (float): Параметр температуры для сэмплирования:
+                              - >1.0 - более случайные результаты
+                              - 1.0 - нейтральное значение
+                              - <1.0 - более предсказуемые результаты
+                              Должна быть > 0 (по умолчанию: 1.0)
 
         Returns:
             torch.Tensor: Тензор с расширенной последовательностью токенов формы 
@@ -104,18 +114,26 @@ class GPT(nn.Module):
 
         Raises:
             ValueError: Если входная последовательность длиннее max_seq_len
+            ValueError: Если temperature <= 0
 
         Examples:
             >>> # Жадная генерация
             >>> output = model.generate(input_ids, max_new_tokens=10, do_sample=False)
             >>>
-            >>> # Вероятностная генерация
-            >>> output = model.generate(input_ids, max_new_tokens=10, do_sample=True)
+            >>> # Вероятностная генерация с температурой
+            >>> output = model.generate(input_ids, max_new_tokens=10, do_sample=True, temperature=0.7)
+            >>>
+            >>> # Более случайная генерация
+            >>> output = model.generate(input_ids, max_new_tokens=10, do_sample=True, temperature=1.5)
 
         Note:
             Для детерминированных результатов в режиме сэмплирования 
             зафиксируйте random seed (torch.manual_seed).
+            Температура влияет только на режим сэмплирования (do_sample=True).
         """
+        if temperature <= 0:
+            raise ValueError("Temperature must be positive")
+            
         for _ in range(max_new_tokens):
             # 1. Обрезаем вход, если последовательность слишком длинная
             x_cond = x[:, -self.max_seq_len:]
@@ -127,7 +145,7 @@ class GPT(nn.Module):
             last_logits = logits[:, -1, :]  # [batch_size, vocab_size]
 
             # 4. Применяем Softmax
-            probs = F.softmax(last_logits, dim=-1)  # [batch_size, vocab_size]
+            probs = F.softmax(last_logits / temperature, dim=-1)  # [batch_size, vocab_size]
 
             if do_sample == True:
                 # 5. Если do_sample равен True, то отбираем токен случайно с помощью torch.multinomial
