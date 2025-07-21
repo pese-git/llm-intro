@@ -89,8 +89,9 @@ class TestGPT:
     def test_temperature_zero_error(self, default_config, sample_input):
         """Тест обработки нулевой температуры"""
         gpt = GPT(**default_config)
-        with pytest.raises(ValueError):
-            gpt.generate(sample_input, max_new_tokens=5, do_sample=True, temperature=0.0)
+        # Теперь при temperature=0 не должно быть ошибки
+        output = gpt.generate(sample_input, max_new_tokens=5, do_sample=True, temperature=0.0)
+        assert output.shape[1] == sample_input.shape[1] + 5  # Проверяем длину вывода
 
     def test_sample_vs_greedy_difference(self, default_config):
         """Тест различий между жадным и сэмплирующим режимами"""

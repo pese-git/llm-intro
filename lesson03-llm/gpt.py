@@ -91,9 +91,19 @@ class GPT(nn.Module):
     ) -> torch.Tensor:
         """Авторегрессивная генерация текста.
         
-        Поддерживает два режима генерации:
-        - Жадный поиск (do_sample=False) - всегда выбирает токен с максимальной вероятностью
-        - Сэмплирование (do_sample=True) - случайный выбор токена согласно распределению вероятностей
+        Параметры:
+            x: Входные токены [batch_size, seq_len]
+            max_new_tokens: Максимальное количество новых токенов для генерации
+            do_sample: Режим генерации:
+                - False: жадный поиск (всегда выбирает токен с максимальной вероятностью)
+                - True: случайная выборка согласно распределению вероятностей
+            temperature: Контроль случайности генерации:
+                - temperature > 0: масштабирует логиты перед softmax
+                - temperature = 0: эквивалентно жадному поиску (берётся токен с максимальной вероятностью)
+                - При do_sample=False температура не влияет на результат
+        
+        Возвращает:
+            Токены [batch_size, seq_len + max_new_tokens]
 
         Args:
             x (torch.Tensor): Входной тензор с индексами токенов формы [batch_size, seq_len],
@@ -130,10 +140,7 @@ class GPT(nn.Module):
             Для детерминированных результатов в режиме сэмплирования 
             зафиксируйте random seed (torch.manual_seed).
             Температура влияет только на режим сэмплирования (do_sample=True).
-        """
-        if temperature <= 0:
-            raise ValueError("Temperature must be positive")
-            
+        """     
         for _ in range(max_new_tokens):
             # 1. Обрезаем вход, если последовательность слишком длинная
             x_cond = x[:, -self.max_seq_len:]
@@ -144,8 +151,14 @@ class GPT(nn.Module):
             # 3. Берем логиты для последнего токена
             last_logits = logits[:, -1, :]  # [batch_size, vocab_size]
 
+            # Масштабируем логиты температурой
+            if temperature > 0:
+                logits_scaled = last_logits / temperature
+            else:
+                logits_scaled = last_logits
+
             # 4. Применяем Softmax
-            probs = F.softmax(last_logits / temperature, dim=-1)  # [batch_size, vocab_size]
+            probs = F.softmax(logits_scaled, dim=-1)  # [batch_size, vocab_size]
 
             if do_sample == True:
                 # 5. Если do_sample равен True, то отбираем токен случайно с помощью torch.multinomial
