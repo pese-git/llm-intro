@@ -83,22 +83,38 @@ class GPT(nn.Module):
             
         return self._linear(out)  # [batch, seq_len, vocab_size]
 
-    def generate(self, x: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
-        """Авторегрессивная генерация текста
+    def generate(self, x: torch.Tensor, max_new_tokens: int, do_sample: bool) -> torch.Tensor:
+        """Авторегрессивная генерация текста.
         
+        Поддерживает два режима генерации:
+        - Жадный поиск (do_sample=False) - всегда выбирает токен с максимальной вероятностью
+        - Сэмплирование (do_sample=True) - случайный выбор токена согласно распределению вероятностей
+
         Args:
-            x: Входной тензор с индексами токенов [batch_size, seq_len]
-            max_new_tokens: Максимальное количество новых токенов для генерации
-            
+            x (torch.Tensor): Входной тензор с индексами токенов формы [batch_size, seq_len],
+                              где batch_size - размер батча, seq_len - длина последовательности.
+            max_new_tokens (int): Максимальное количество новых токенов для генерации.
+            do_sample (bool): Флаг выбора режима генерации:
+                              - True: вероятностное сэмплирование
+                              - False: жадный поиск (argmax)
+
         Returns:
-            Тензор с расширенной последовательностью токенов [batch_size, seq_len + max_new_tokens]
-            
-        Алгоритм работы:
-        1. На каждом шаге берется последний фрагмент последовательности (не длиннее max_seq_len)
-        2. Вычисляются логиты для следующего токена
-        3. Выбирается токен с максимальной вероятностью (жадный алгоритм)
-        4. Токен добавляется к последовательности
-        5. Процесс повторяется пока не сгенерируется max_new_tokens токенов
+            torch.Tensor: Тензор с расширенной последовательностью токенов формы 
+                          [batch_size, seq_len + max_new_tokens]
+
+        Raises:
+            ValueError: Если входная последовательность длиннее max_seq_len
+
+        Examples:
+            >>> # Жадная генерация
+            >>> output = model.generate(input_ids, max_new_tokens=10, do_sample=False)
+            >>>
+            >>> # Вероятностная генерация
+            >>> output = model.generate(input_ids, max_new_tokens=10, do_sample=True)
+
+        Note:
+            Для детерминированных результатов в режиме сэмплирования 
+            зафиксируйте random seed (torch.manual_seed).
         """
         for _ in range(max_new_tokens):
             # 1. Обрезаем вход, если последовательность слишком длинная
@@ -113,11 +129,15 @@ class GPT(nn.Module):
             # 4. Применяем Softmax
             probs = F.softmax(last_logits, dim=-1)  # [batch_size, vocab_size]
 
-            # 5. Выбираем токен с максимальной вероятностью
-            next_token = torch.argmax(probs, dim=-1, keepdim=True)  # [batch_size, 1]
-
+            if do_sample == True:
+                # 5. Если do_sample равен True, то отбираем токен случайно с помощью torch.multinomial
+                next_token = torch.multinomial(probs, num_samples=1)  # [batch_size, 1]
+            else:
+                # 5. Если do_sample равен False, то выбираем токен с максимальной вероятностью
+                next_token = torch.argmax(probs, dim=-1, keepdim=True)  # [batch_size, 1]
+            
             # 6. Добавляем его к последовательности
-            x = torch.cat([x, next_token], dim=1)  # [batch_size, seq_len+1]     
+            x = torch.cat([x, next_token], dim=1)  # [batch_size, seq_len+1]
         return x
 
     def save(self, path):
