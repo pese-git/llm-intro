@@ -38,6 +38,16 @@ class TokenEmbeddings(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return self._embedding(x)
 
+    @property
+    def num_embeddings(self) -> int:
+        """Возвращает размер словаря"""
+        return self._embedding.num_embeddings
+
+    @property
+    def embedding_dim(self) -> int:
+        """Возвращает размерность эмбеддингов"""
+        return self._embedding.embedding_dim
+
 
 if __name__ == "__main__":
     # Пример использования

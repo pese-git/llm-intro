@@ -29,8 +29,14 @@ class GPT(nn.Module):
         device: str = 'cpu'
     ):
         super().__init__()
-        self.device = device
-        self.max_seq_len = max_seq_len
+        self._vocab_size = vocab_size
+        self._max_seq_len = max_seq_len
+        self._emb_size = emb_size
+        self._num_heads = num_heads
+        self._head_size = head_size
+        self._num_layers = num_layers
+        self._dropout = dropout
+        self._device = device
         
         # Инициализация слоев
         self._token_embeddings = TokenEmbeddings(
@@ -61,7 +67,7 @@ class GPT(nn.Module):
             Тензор логитов [batch_size, seq_len, vocab_size]
         """
         # Проверка длины последовательности
-        if x.size(1) > self.max_seq_len:
+        if x.size(1) > self._max_seq_len:
             raise ValueError(f"Длина последовательности {x.size(1)} превышает максимальную {self.max_seq_len}")
         
         # Эмбеддинги токенов и позиций
@@ -113,3 +119,34 @@ class GPT(nn.Module):
             # 6. Добавляем его к последовательности
             x = torch.cat([x, next_token], dim=1)  # [batch_size, seq_len+1]     
         return x
+
+    def save(self, path):
+        torch.save({
+            'model_state_dict': self.state_dict(),
+            'vocab_size': self._vocab_size,
+            'max_seq_len': self._max_seq_len,
+            'emb_size': self._emb_size,
+            'num_heads': self._num_heads,
+            'head_size': self._head_size,
+            'num_layers': self._num_layers
+        }, path)
+
+    @classmethod
+    def load(cls, path, device):
+        checkpoint = torch.load(path, map_location=device)
+        model = cls(
+            vocab_size=checkpoint['vocab_size'],
+            max_seq_len=checkpoint['max_seq_len'],
+            emb_size=checkpoint['emb_size'],
+            num_heads=checkpoint['num_heads'],
+            head_size=checkpoint['head_size'],
+            num_layers=checkpoint['num_layers']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.to(device)
+        return model
+
+    @property
+    def max_seq_len(self) -> int:
+        """Возвращает максимальную длину последовательности"""
+        return self._max_seq_len
