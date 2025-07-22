@@ -183,9 +183,6 @@ class GPT(nn.Module):
             зафиксируйте random seed (torch.manual_seed).
             Температура влияет только на режим сэмплирования (do_sample=True).
         """
-        if top_k != None and top_p != None:
-            raise ValueError("В LLM не рекомендуют задавать их одновременно, а использовать что-то одно")
-            
         for _ in range(max_new_tokens):
             # 1. Обрезаем вход, если последовательность слишком длинная
             x_cond = x[:, -self.max_seq_len:]
