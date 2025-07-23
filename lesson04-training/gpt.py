@@ -1,6 +1,7 @@
 from torch import nn
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from token_embeddings import TokenEmbeddings
 from positional_embeddings import PositionalEmbeddings
 from decoder import Decoder
@@ -277,3 +278,107 @@ class GPT(nn.Module):
     def max_seq_len(self) -> int:
         """Возвращает максимальную длину последовательности"""
         return self._max_seq_len
+
+
+    def fit(self,
+        train_loader: DataLoader,
+        valid_loader: DataLoader = None,
+        num_epoch: int = 1,
+        learning_rate: float = 0.001
+    ):
+        """Обучает модель GPT на предоставленных данных.
+        
+        Процесс обучения включает:
+        - Прямой проход для получения предсказаний
+        - Вычисление потерь с помощью кросс-энтропии
+        - Обратное распространение ошибки
+        - Обновление весов через оптимизатор Adam
+        
+        Args:
+            train_loader (DataLoader): Загрузчик обучающих данных, возвращающий пары (inputs, targets).
+                inputs - тензор индексов токенов формы [batch_size, seq_len]
+                targets - тензор индексов следующих токенов формы [batch_size, seq_len]
+            valid_loader (DataLoader, optional): Загрузчик валидационных данных. Если None, 
+                валидация не выполняется. По умолчанию None.
+            num_epoch (int, optional): Количество эпох обучения. По умолчанию 1.
+            learning_rate (float, optional): Скорость обучения для оптимизатора. По умолчанию 0.001.
+        
+        Returns:
+            None
+        
+        Raises:
+            ValueError: Если train_loader равен None
+            ValueError: Если num_epoch ≤ 0
+            ValueError: Если learning_rate ≤ 0
+        
+        Side Effects:
+            - Обновляет параметры модели (self.parameters())
+            - Устанавливает атрибуты:
+                self.train_loss: Средние потери на обучении за последнюю эпоху
+                self.validation_loss: Средние потери на валидации за последнюю эпоху (если valid_loader передан)
+        
+        Examples:
+            >>> from torch.utils.data import DataLoader, TensorDataset
+            >>> # Создаем тестовые данные
+            >>> inputs = torch.randint(0, 100, (100, 10))
+            >>> targets = torch.randint(0, 100, (100, 10))
+            >>> dataset = TensorDataset(inputs, targets)
+            >>> loader = DataLoader(dataset, batch_size=32)
+            >>> # Инициализируем модель
+            >>> model = GPT(vocab_size=100, max_seq_len=20, emb_size=64, 
+            ...             num_heads=4, head_size=16, num_layers=2)
+            >>> # Обучаем модель
+            >>> model.fit(loader, num_epoch=5, learning_rate=0.001)
+        """
+        if train_loader is None:
+            raise ValueError("train_loader не может быть None")
+        if num_epoch <= 0:
+            raise ValueError("num_epoch должен быть > 0")
+        if learning_rate <= 0:
+            raise ValueError("learning_rate должен быть > 0")
+    
+        device = torch.device(self._device)
+        self.to(device)
+    
+        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
+    
+        for epoch in range(num_epoch):
+            self.train()
+            epoch_loss = 0.0
+    
+            #for inputs, targets in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epoch}"):
+            for inputs, targets in train_loader:
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+    
+                logits = self(inputs)
+                logits = logits.view(-1, logits.size(-1))
+                targets = targets.view(-1)
+    
+                loss = F.cross_entropy(logits, targets)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+    
+                epoch_loss += loss.item()
+    
+            self.train_loss = epoch_loss / len(train_loader)
+            #print(f"[{epoch+1}/{num_epoch}] Train Loss: {self.train_loss:.4f}", end='')
+    
+            if valid_loader is not None:
+                self.eval()
+                valid_loss = 0.0
+                with torch.no_grad():
+                    for inputs, targets in valid_loader:
+                        inputs = inputs.to(device)
+                        targets = targets.to(device)
+    
+                        logits = self(inputs)
+                        logits = logits.view(-1, logits.size(-1))
+                        targets = targets.view(-1)
+    
+                        loss = F.cross_entropy(logits, targets)
+                        valid_loss += loss.item()
+    
+                self.validation_loss = valid_loss / len(valid_loader)
+                #print(f" | Val Loss: {self.validation_loss:.4f}")
