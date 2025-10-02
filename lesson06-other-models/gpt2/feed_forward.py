@@ -1,5 +1,6 @@
 from torch import nn
 import torch
+from gelu import GELU
 
 class FeedForward(nn.Module):
     """
@@ -7,12 +8,12 @@ class FeedForward(nn.Module):
     
     Этот слой состоит из двух линейных преобразований с расширением внутренней размерности
     в 4 раза и механизмом dropout для регуляризации. Между линейными слоями применяется
-    активация ReLU.
+    активация GELU (Gaussian Error Linear Unit), которая является стандартной для GPT-2.
 
     Алгоритм работы:
     1. Входной тензор x (размерность: [batch_size, seq_len, emb_size])
     2. Линейное преобразование: emb_size -> 4*emb_size
-    3. Активация ReLU
+    3. Активация GELU
     4. Линейное преобразование: 4*emb_size -> emb_size
     5. Применение dropout
     6. Возврат результата (размерность: [batch_size, seq_len, emb_size])
@@ -21,6 +22,12 @@ class FeedForward(nn.Module):
     - Добавляет нелинейность в архитектуру трансформера
     - Обеспечивает взаимодействие между различными размерностями эмбеддингов
     - Работает независимо для каждого токена в последовательности
+    - Использует GELU активацию для лучшей производительности в NLP задачах
+
+    Особенности реализации GPT-2:
+    - Используется GELU вместо ReLU для более плавной активации
+    - Коэффициент расширения 4x соответствует оригинальной архитектуре
+    - Dropout применяется только к выходу второго линейного слоя
 
     Примеры использования:
     
@@ -48,11 +55,11 @@ class FeedForward(nn.Module):
         super().__init__()
         # Первый линейный слой (расширение размерности)
         self._layer1 = nn.Linear(emb_size, emb_size * 4)
-        # ReLU активация
-        self._relu = nn.ReLU()
+        # GELU активация (используется в GPT-2 вместо ReLU)
+        self._gelu = GELU()
         # Второй линейный слой (сжатие обратно)
         self._layer2 = nn.Linear(emb_size * 4, emb_size)
-        # Dropout
+        # Dropout для регуляризации
         self._dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor):
@@ -75,6 +82,6 @@ class FeedForward(nn.Module):
             
         # Пропустим тензор x по очереди через все созданные слои
         x = self._layer1(x)
-        x = self._relu(x)
+        x = self._gelu(x)
         x = self._layer2(x)
         return self._dropout(x)
